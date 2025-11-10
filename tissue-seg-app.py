@@ -303,7 +303,7 @@ def initialize_gemini():
     """Initialize Gemini AI with API key"""
     try:
         # Configure Gemini API
-        os.environ["GEMINI_API_KEY"] = "AIzaSyA21AIdWr6F0UqlR4FwnIf6r3kinLjHe9Q"
+        os.environ["GEMINI_API_KEY"] = "AIzaSyA3a3nyx4dELXcdc2f6qR5wAJmzfgJrkx8"
         genai.configure(api_key=os.environ["GEMINI_API_KEY"])
         
         generation_config = {
