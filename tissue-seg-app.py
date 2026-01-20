@@ -26,7 +26,7 @@ from fastai.basics import *
 import gc
 import re
 # Gemini AI Integration
-import google.generativeai as genai
+from openai import OpenAI  # For OpenRouter API compatibility
 import tempfile
 from datetime import datetime
 
@@ -297,41 +297,32 @@ st.set_page_config(
 if 'dark_mode' not in st.session_state:
     st.session_state.dark_mode = True
 
-# ──── Gemini AI Configuration ────────────────────────────────────────────────
+
+# ──── OpenRouter AI Configuration (Gemini 2.5 Flash) ──────────────────────────
 @st.cache_resource
 def initialize_gemini():
-    """Initialize Gemini AI with API key"""
+    """Initialize OpenRouter AI with Gemini 2.5 Flash model"""
     try:
-        # Configure Gemini API
-        os.environ["GEMINI_API_KEY"] = "AIzaSyA3a3nyx4dELXcdc2f6qR5wAJmzfgJrkx8"
-        genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+        # Configure OpenRouter API
+        OPENROUTER_API_KEY = st.secrets["openrouter"]["api_key"]
         
-        generation_config = {
-            "temperature": 0.7,
-            "top_p": 0.95,
-            "top_k": 64,
-            "max_output_tokens": 8192,
-            "response_mime_type": "text/plain",
-        }
+        # Use OpenRouter endpoint for Gemini 2.5 Flash
+        base_url = "https://openrouter.ai/api/v1"
         
-        safety_settings = [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-        ]
-        
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
-            safety_settings=safety_settings,
-            generation_config=generation_config,
-            system_instruction="You are a professional medical AI assistant specializing in wound care and analysis. Provide detailed, accurate, and clinically relevant information while emphasizing the importance of professional medical consultation."
+        # Configure the model using OpenAI SDK (OpenRouter is compatible)
+        client = OpenAI(
+            base_url=base_url,
+            api_key=OPENROUTER_API_KEY
         )
         
-        return model
+        # Store the model name for use
+        model_name = "google/gemini-2.5-flash"
+        
+        return client, model_name
+        
     except Exception as e:
-        st.error(f"Error initializing Gemini AI: {str(e)}")
-        return None
+        st.error(f"Error initializing OpenRouter AI: {str(e)}")
+        return None, None
 
 # ──── Config ───────────────────────────────────────────────────
 
@@ -457,10 +448,10 @@ model_download_success = download_models()
 # ──── Gemini AI Functions ────────────────────────────────────────────────
 
 def generate_health_assessment(tissue_data, wound_type, confidence):
-    """Generate detailed health assessment using Gemini AI"""
+    """Generate detailed health assessment using OpenRouter AI"""
     try:
-        gemini_model = initialize_gemini()
-        if not gemini_model:
+        client, model_name = initialize_gemini()
+        if not client:
             return "Health assessment unavailable - AI service not available"
         
         prompt = f"""
@@ -485,22 +476,33 @@ def generate_health_assessment(tissue_data, wound_type, confidence):
         Use only plain text with clear formatting and proper paragraphs.
         """
         
-        chat = gemini_model.start_chat()
-        response = chat.send_message(prompt)
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a professional medical AI assistant specializing in wound care and analysis. Provide detailed, accurate, and clinically relevant information while emphasizing the importance of professional medical consultation."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=8192
+        )
         
-        # Clean up any markdown formatting aggressively
-        cleaned_response = clean_markdown_formatting(response.text)
-        
+        cleaned_response = clean_markdown_formatting(response.choices[0].message.content)
         return cleaned_response
         
     except Exception as e:
         return f"Health assessment unavailable: {str(e)}"
 
 def generate_wound_classification_info(wound_type, confidence, tissue_data):
-    """Generate detailed wound classification information using Gemini AI"""
+    """Generate detailed wound classification information using OpenRouter AI"""
     try:
-        gemini_model = initialize_gemini()
-        if not gemini_model:
+        client, model_name = initialize_gemini()
+        if not client:
             return "Classification information unavailable - AI service not available"
         
         prompt = f"""
@@ -526,22 +528,33 @@ def generate_wound_classification_info(wound_type, confidence, tissue_data):
         Use only plain text with clear formatting and proper paragraphs.
         """
         
-        chat = gemini_model.start_chat()
-        response = chat.send_message(prompt)
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a professional medical AI assistant specializing in wound care and analysis."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=8192
+        )
         
-        # Clean up any markdown formatting aggressively
-        cleaned_response = clean_markdown_formatting(response.text)
-        
+        cleaned_response = clean_markdown_formatting(response.choices[0].message.content)
         return cleaned_response
         
     except Exception as e:
         return f"Classification information unavailable: {str(e)}"
-
+        
 def generate_clinical_recommendations(tissue_data, wound_type, health_score):
-    """Generate clinical recommendations using Gemini AI"""
+    """Generate clinical recommendations using OpenRouter AI"""
     try:
-        gemini_model = initialize_gemini()
-        if not gemini_model:
+        client, model_name = initialize_gemini()
+        if not client:
             return ["Clinical recommendations unavailable - AI service not available"]
         
         prompt = f"""
@@ -569,11 +582,23 @@ def generate_clinical_recommendations(tissue_data, wound_type, health_score):
         Monitor wound for signs of infection including increased redness, warmth, swelling, or purulent drainage.
         """
         
-        chat = gemini_model.start_chat()
-        response = chat.send_message(prompt)
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a professional medical AI assistant specializing in wound care and analysis."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=8192
+        )
         
-        # Clean up any markdown formatting aggressively
-        cleaned_text = clean_markdown_formatting(response.text)
+        cleaned_text = clean_markdown_formatting(response.choices[0].message.content)
         
         # Parse the response into individual recommendations
         recommendations = []
@@ -593,7 +618,6 @@ def generate_clinical_recommendations(tissue_data, wound_type, health_score):
             import re
             clean_paragraph = re.sub(r'^\d+[\.\)]\s*', '', clean_paragraph)
             clean_paragraph = re.sub(r'^[•\-\*]\s*', '', clean_paragraph)
-            #clean_paragraph = re.sub(r'^\w+\.\s*', '', clean_paragraph)  # Remove "1. " etc
             
             # Only add substantial recommendations (more than 20 characters)
             if len(clean_paragraph) > 20 and not clean_paragraph.lower().startswith('clinical'):
@@ -726,10 +750,10 @@ def format_tissue_data_for_prompt(tissue_data):
     return '\n'.join(formatted)
 
 def generate_ai_health_score(tissue_data, wound_type):
-    """Generate AI health score independently using Gemini AI"""
+    """Generate AI health score independently using OpenRouter AI"""
     try:
-        gemini_model = initialize_gemini()
-        if not gemini_model:
+        client, model_name = initialize_gemini()
+        if not client:
             return 50, "AI service unavailable - using neutral score"
         
         prompt = f"""
@@ -765,11 +789,23 @@ def generate_ai_health_score(tissue_data, wound_type):
         underscores (_), hash symbols (#), or any other markdown syntax.
         """
         
-        chat = gemini_model.start_chat()
-        response = chat.send_message(prompt)
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a wound healing expert providing clinical assessments."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=8192
+        )
         
-        # Clean markdown formatting
-        cleaned_response = clean_markdown_formatting(response.text)
+        cleaned_response = clean_markdown_formatting(response.choices[0].message.content)
         
         # Parse the response to extract score and justification
         lines = cleaned_response.split('\n')
@@ -780,12 +816,10 @@ def generate_ai_health_score(tissue_data, wound_type):
             if line.startswith('SCORE:'):
                 try:
                     score_text = line.split(':')[1].strip()
-                    # Extract just the number if there are additional words
                     import re
                     score_match = re.search(r'\d+', score_text)
                     if score_match:
                         ai_score = int(score_match.group())
-                        # Ensure score is within valid range
                         ai_score = max(0, min(100, ai_score))
                 except:
                     pass
@@ -798,10 +832,10 @@ def generate_ai_health_score(tissue_data, wound_type):
         return 50, f"AI assessment unavailable: {str(e)}"
 
 def generate_professional_report(tissue_data, wound_type, confidence, health_score, recommendations):
-    """Generate a comprehensive professional wound report using Gemini AI"""
+    """Generate a comprehensive professional wound report using OpenRouter AI"""
     try:
-        gemini_model = initialize_gemini()
-        if not gemini_model:
+        client, model_name = initialize_gemini()
+        if not client:
             return "Professional report unavailable - AI service not available"
         
         prompt = f"""
@@ -834,12 +868,23 @@ def generate_professional_report(tissue_data, wound_type, confidence, health_sco
         Use only plain text with clear section headers and proper paragraph formatting.
         """
         
-        chat = gemini_model.start_chat()
-        response = chat.send_message(prompt)
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a medical report generator creating professional wound assessment reports."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=8192
+        )
         
-        # Clean up any markdown formatting aggressively
-        cleaned_response = clean_markdown_formatting(response.text)
-        
+        cleaned_response = clean_markdown_formatting(response.choices[0].message.content)
         return cleaned_response
         
     except Exception as e:
@@ -2389,8 +2434,9 @@ if uploaded:
                                        f"Health score: {basic_health_score:.0f}/100")
 
                 # Step 5: AI Enhancement with Gemini (70-100%)
-                if gemini_model:
-                    progress_tracker.update(75, 100, "🤖 Connecting to Gemini AI...", 
+                client, gemini_model_name = initialize_gemini()
+                if client:
+                    progress_tracker.update(75, 100, "🤖 Connecting to AI Service...", 
                                            "Initializing advanced AI assessment")
                     
                     progress_tracker.update(80, 100, "🧠 Generating AI health score...", 
